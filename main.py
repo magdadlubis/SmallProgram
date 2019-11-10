@@ -1,6 +1,7 @@
 import argparse
 
 from dispacher import Dispacher
+from logic_handler import OptionsHandler
 
 parser = argparse.ArgumentParser(description='Program options')
 parser.add_argument('--username', '-u', help='Login - user email', action='store')
@@ -12,19 +13,26 @@ parser.add_argument('--list', '-l', help='List of user or massages', action='sto
 parser.add_argument('--send', '-s', help='Send', action='store')
 parser.add_argument('--to', '-t', help='Address of message', action='store')
 
-
 if __name__ == '__main__':
     args = parser.parse_args()
     print(args)
     dispacher = Dispacher()
 
-    if args.username and args.password:
-        if not all([args.edit, args.delete, args.send, args.list, args.to, args.new_password]):
-            print('Create User')
-        elif all([args.edit, args.new_password]) and not all([args.delete, args.send, args.list, args.to]):
-            print('Change Password')
-    elif args.list and \
-        not all([args.edit, args.delete, args.send, args.username, args.to, args.new_password, args.password]):
-        print('All users')
+    option_handler = OptionsHandler(
+        args.password, args.username, args.new_password, args.edit, args.delete, args.list, args.send, args.to
+    )
+
+    if option_handler.create_user:
+        print('User Created')
+    elif option_handler.list_all_users:
+        print('All users list')
+    elif option_handler.list_all_messages_for_user:
+        print('All messages for user')
+    elif option_handler.change_password:
+        print('Password Changed!')
+    elif option_handler.send_message:
+        print('Message send from user to user with txt')
+    elif option_handler.delete_user:
+        print('User deleted')
     else:
         dispacher.not_available_option()

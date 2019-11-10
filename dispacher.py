@@ -9,6 +9,7 @@ class WrongParameterError(Exception):
 
 
 class Dispacher:
+    """HINT: USERNAME == EMAIL """
     def create_user(self, username: str, password: str) -> User:
         """Create user to User table"""
         raise NotImplementedError
@@ -29,7 +30,7 @@ class Dispacher:
         """Delete given user"""
         raise NotImplementedError
 
-    def list_messages(self, user: User) -> List[Union[Message, None]]:
+    def list_messages_to_user(self, user: User) -> List[Union[Message, None]]:
         """Return list of all messages in database for specific user"""
         raise NotImplementedError
 
