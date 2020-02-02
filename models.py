@@ -1,7 +1,7 @@
 from psycopg2 import connect
 from psycopg2.extras import RealDictCursor
 
-from clcrypto import password_hash, check_password, generate_salt
+from clcrypto import generate_salt, password_hash, check_password
 
 
 def create_conenction(db_name='communications_server'):
@@ -23,84 +23,122 @@ def get_cursor(db_connection):
     return db_connection.cursor(cursor_factory=RealDictCursor)
 
 
-class User:
+class _Model:
+    TABLE_NAME = None
+
     def __init__(self):
         self._id = -1
-        self.username = None
-        self._hashed_password = None
-        self.email = None
 
     @property
     def id(self):
+        # Getter do odczytu ID
         return self._id
 
-    @property
-    def hashed_password(self):
-        return self._hashed_password
+    def delete(self, cursor):
+        # SQL do usunięcia wpisu w bazie danych poprzez ID
+        sql = "DELETE FROM {TABLE_NAME} WHERE id={id}".format(TABLE_NAME=self.TABLE_NAME, id=self.id)
+        cursor.execute(sql)  # wykonanie
+
+    @classmethod
+    def load_all(cls, cursor):
+        # Pobranie danych z bazy danych
+        sql = "SELECT * FROM {TABLE_NAME}".format(TABLE_NAME=cls.TABLE_NAME)
+        cursor.execute(sql)
+        data = []
+        # Stworzenie listy obiektów na podstawie otrzymanych danych
+        for record in cursor.fetchall():
+            object = cls._create_object(
+                **record)  # Stworzenie jednego obiektu reprezentującego jeden wpis w bazie danych
+            data.append(object)  # Dodanie obiektu do listy
+        return data  # Zwrócenie listy obiektów lub pustej
+
+    @classmethod
+    def load_by_id(cls, cursor, id):
+        # SQL aby pobrać dokładnie jeden wpis z bazy danych poprzez ID
+        sql = "SELECT * FROM {TABLE_NAME} WHERE id='{id}'".format(TABLE_NAME=cls.TABLE_NAME, id=id)
+        cursor.execute(sql)
+        record = cursor.fetchone()  # Wyciągnięcie danych z kursora
+        if record:
+            return cls._create_object(**record)  # Stworzenie obiektu jeśli baza zwróciła dane
+        return None  # Zwrócenie non jeśli wpis z podanym ID nie istnieje
+
+    @classmethod
+    def _create_object(cls, *args, **kwargs):
+        raise NotImplemented  # To trzeba napisać samemu ;)
+
+
+class User(_Model):
+    TABLE_NAME = 'users'
+
+    def __init__(self):
+        super(User, self).__init__()
+        self.username = ''
+        self.email = ''
+        self._hashed_password = ''
+
+    def save(self, cursor):
+        if self.id == -1:
+            # Jeśli ID = -1 to znaczy że obiekt jest stworzony poprzez kod i nie istnieje jego odpowiednik w bazie danych
+            self._create_record_db(cursor)
+            return True
+        else:
+            # Jeśli ID != -1 obiekt ma swój odpowiednik w bazie danych także go aktualizujemy
+            self._update_record_in_db(cursor)
+            return False
 
     def set_password(self, password, salt):
+        # ustawia hasło od razu je szyfrując
         self._hashed_password = password_hash(password, salt)
 
     def check_password(self, password_to_check):
+        # porównanie haseł
         return check_password(password_to_check, self._hashed_password)
 
-    @staticmethod
-    def _create_user_object(username, _hashed_password, email, id=-1):
+    @classmethod
+    def load_by_email(cls, cursor, email):
+        # Wczytanie danych z bazy danych poprzez email
+        sql = "SELECT * FROM users WHERE email=%s"
+        cursor.execute(sql, (email,))
+        record = cursor.fetchone()
+        if record:
+            return cls._create_object(**record)  # zwrócenie obiektu
+        return None
+
+    @classmethod
+    def _create_object(cls, username, email, hashed_password, id=-1):
         user = User()
         user.username = username
-        user._hashed_password = _hashed_password
         user.email = email
         user._id = id
+        user._hashed_password = hashed_password
         return user
 
-    def get_all(self, cursor):
-        sql = "SELECT username, hashed_password, email, id FROM Users"
-        cursor.execute(sql)
-        objects = []
-        for row in cursor.fetchall():
-            user = self._create_user_object(row['username'], row['hashed_password'], row['email'], row['id'])
-            objects.append(user)
-        return objects
+    def _create_record_db(self, cursor):
+        # SQL aby dodać obiekt do bazy
+        sql = "INSERT INTO users (username, email, hashed_password) VALUES (%s, %s, %s) RETURNING id"
+        cursor.execute(sql, (self.username, self.email, self._hashed_password))
+        user_id = cursor.fetchone()['id']  # Aktualizacna ID, przyznanego przez bazę
+        self._id = user_id
 
-    def get_by_id(self, cursor, id):
-        sql = "SELECT username, hashed_password, email, id FROM Users WHERE id=%s"
-        # Drugi parametr w execute jest to lista gdzie kolejne elementy będą wstawiane w kolejne miejsca %s
-        # Gwarantuje to ochronę przed SQL Injection
-        cursor.execute(sql, (id,))
-        row = cursor.fetchone()
-        if not row:
-            return None
-        return self._create_user_object(row['username'], row['hashed_password'], row['email'], row['id'])
+    def _update_record_in_db(self, cursor):
+        # Aktualizacja wpisu w bazie danych
+        sql = "UPDATE Users SET email=%s, username=%s, hashed_password=%s WHERE id=%s"
+        cursor.execute(sql, (self.email, self.username, self._hashed_password), self.id)
+
+
+class Message(_Model):
+    TABLE_NAME = 'messages'
+
+    def __init__(self):
+        super(Message, self).__init__()
+        # Dopisać atrybuty do konstruktora
+
+    @classmethod
+    def _create_object(cls, param1, param2):  # zamień parametry na konkretne kolumny!
+        raise NotImplemented  # Tutaj tworzycie obiekt jak w klasie User
 
     def save(self, cursor):
-        if self._id == -1:
-            self._create(cursor)
-            return 'Created'
-        else:
-            self._update(cursor)
-            return 'Updated'
-
-    def _create(self, cursor):
-        sql = "INSERT INTO users (email, username, hashed_password) VALUES (%s, %s, %s) RETURNING id"
-        values = (self.email, self.username, self._hashed_password)
-        cursor.execute(sql, values)
-        self._id = cursor.fetchone()['id']
-
-    def _update(self, cursor):
-        sql = "UPDATE Users SET email=%s, username=%s, hashed_password=%s WHERE id=%s"
-        values = (self.email, self.username, self._hashed_password, self._id)
-        cursor.execute(sql, values)
-
-    def delete(self, cursor):
-        sql = "DELETE FROM users WHERE id=%s"
-        cursor.execute(sql, (self._id,))
-
-    def __repr__(self):
-        return f'User id: {self._id}, email: {self.email}, username: {self.username}'
-
-
-class Message:
-    pass
+        raise NotImplemented  # Zapis lub aktualizacja recordów w bazie danych!
 
 
 if __name__ == '__main__':
@@ -121,11 +159,12 @@ if __name__ == '__main__':
     user2.set_password('pass', salt)
     user2.save(cursor)
 
-    print(User().get_all(cursor))
-    print(User().get_by_id(cursor, 3))
+    print(User.load_all(cursor))
+    print(User.load_by_id(cursor, 6))
+    print(User.load_by_email(cursor, 'user2@domain.com'))
     user2.delete(cursor)
     print('Usunięcie', user2)
-    print(User().get_all(cursor))
+    print(User.load_all(cursor))
 
     cursor.close()
     connection.close()

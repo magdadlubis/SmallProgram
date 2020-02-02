@@ -35,4 +35,5 @@ if __name__ == '__main__':
     elif option_handler.delete_user:
         print('User deleted')
     else:
-        dispacher.not_available_option()
+        print('Anavaible options:')
+        print('Create user: -u {user_name} -p {password}')
