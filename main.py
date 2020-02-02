@@ -23,6 +23,7 @@ if __name__ == '__main__':
     )
 
     if option_handler.create_user:
+        # dispacher.create_user(args.username, args.password)
         print('User Created')
     elif option_handler.list_all_users:
         print('All users list')
